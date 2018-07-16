@@ -2,8 +2,7 @@ import ReleaseTransformations._
 import sbt._
 
 lazy val akkaVersion = "2.5.13"
-lazy val http4sOrg = "com.github.benhutchison"
-lazy val http4sVersion = "1.0.0-SNAPSHOT-PR1923"
+lazy val http4sVersion = "0.19.0-M1"
 lazy val theScalaVersion = "2.12.6"
 
 lazy val commonSettings = Seq(
@@ -17,8 +16,8 @@ lazy val root = (project in file("."))
   .settings(
     commonSettings,
     libraryDependencies ++= Seq(
-      http4sOrg %% "http4s-core" % http4sVersion,
-      http4sOrg %% "http4s-blaze-server" % http4sVersion,
+      "org.http4s" %% "http4s-core" % http4sVersion,
+      "org.http4s" %% "http4s-blaze-server" % http4sVersion,
       "org.http4s" %% "http4s-websocket" % "0.2.1",
       "com.github.benhutchison" %% "factor" % "0.1",
     ),
@@ -52,7 +51,7 @@ lazy val integrationTest = (project in file("integrationTest"))
   .settings(
     commonSettings,
     libraryDependencies ++= Seq(
-      http4sOrg %% "http4s-dsl" % http4sVersion,
+      "org.http4s" %% "http4s-dsl" % http4sVersion,
       "com.typesafe.akka" %% "akka-http"   % "10.1.3",
       "com.typesafe.akka" %% "akka-stream" % akkaVersion,
       "org.typelevel" %% "mouse" % "0.17",

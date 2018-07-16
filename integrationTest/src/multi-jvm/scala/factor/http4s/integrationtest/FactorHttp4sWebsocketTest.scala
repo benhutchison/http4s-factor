@@ -34,7 +34,7 @@ object FactorHttp4sWebsocketMultiJvmServerNode extends fs2.StreamApp[IO] with or
   val localAddress = SystemAddress(name, "127.0.0.1", 3678)
   val system = new FactorSystem(localAddress)
 
-  def route(implicit timer: Timer[IO]): HttpService[IO] = HttpService[IO] {
+  def route(implicit timer: Timer[IO]): HttpRoutes[IO] = HttpRoutes.of[IO] {
     case GET -> Root / "n" =>
       val handler = (inc: Int) => (env: (Int, IO[Unit]), s: Int) => {
         val (limit, terminateAction) = env
