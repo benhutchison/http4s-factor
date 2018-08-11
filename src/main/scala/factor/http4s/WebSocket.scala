@@ -4,6 +4,7 @@ import scala.concurrent.duration._
 import scala.reflect._
 import factor._
 import cats._
+import cats.data._
 import cats.implicits._
 import cats.effect._
 import fs2._
@@ -12,7 +13,6 @@ import fs2.async.mutable._
 import org.http4s.server.websocket._
 import org.http4s.websocket.WebsocketBits._
 import org.http4s.{Status, Response}
-
 import mouse.all._
 
 import scala.concurrent._
@@ -40,8 +40,10 @@ object FactorWebSocket {
     * @param env Environment passed to each Factor
     * @param initState initial state of each Factor
     * @param handler behavioral function of the factor. Takes the attempt to decode an incoming message from the socket,
-    *                plus the current Factor env and state, and returns new state and an optional response of type `Out`
-    *                to be sent out through the socket
+    *                plus the current Factor env and state, and returns a `HandlerResult`, which describes:
+    *                - new state
+    *                - an optional reply of type `Out` to be sent to client thru websocket
+    *                - a flag to tell the framework to close the socket and stop the factor
     *
     * @param decode decoder of incoming messages
     * @param encode encoder of outgoing messages
@@ -54,7 +56,7 @@ object FactorWebSocket {
     factorAddress: SystemAddress,
     env: E,
     initState: S,
-    handler: Either[String, In] => (E, S) => IO[(S, Option[Out])],
+    handler: Either[String, In] => (E, S) => IO[HandlerResult[S, Out]],
     decode: WebSocketFrame => Either[String, In],
     encode: Out => WebSocketFrame,
     initMessage: Option[Out] = None,
@@ -90,11 +92,14 @@ object FactorWebSocket {
           actorMessages
       }
       
-//      clientActor = actorSystem.actorOf(Props(new ClientActor(props, queue, signal)))
-
       messagesFromBrowser: Sink[IO, WebSocketFrame] = _.map { frame: WebSocketFrame =>
-        factor.run(handler(decode(frame))).flatMap(_.cata(reply => queue.enqueue1(reply), IO.unit)).unsafeRunSync()
+        factor.run(handler(decode(frame))).flatMap {
+          case (optReply, closeWebSocket) =>
+              optReply.map(queue.enqueue1(_)).sequence_ >>
+                closeWebSocket.option(signal.set(true)).sequence_
+          }.handleErrorWith(t => IO(t.printStackTrace())).unsafeRunSync()
       }.onFinalize(IO(factor.stop))
+
 
       response <- WebSocketBuilder[IO].build(messagesToBrowser, messagesFromBrowser)
     } yield (response)
@@ -107,7 +112,7 @@ object FactorWebSocket {
     factorAddress: SystemAddress,
     env: E,
     initState: S,
-    handler: In => (E, S) => IO[(S, Option[Out])],
+    handler: In => (E, S) => IO[HandlerResult[S, Out]],
     decode: WebSocketFrame => Either[String, In],
     encode: Out => WebSocketFrame,
     initMessage: Option[Out] = None,
@@ -123,11 +128,24 @@ object FactorWebSocket {
           handler(in)
         case Left(msg) =>
           System.err.println(s"Failed to decode WebSocketFrame: $msg")
-          (_, s) => IO.pure((s, Option.empty[Out]))
-      }: Either[String, In] => (E, S) => IO[(S, Option[Out])],
+          (_, s) => IO.pure(Result(s, None))
+      }: Either[String, In] => (E, S) => IO[HandlerResult[S, Out]],
       decode, encode, initMessage, config
     )
 
+}
+
+sealed trait HandlerResult[S, Out] extends Product2[S, (Option[Out], Boolean)] {
+  def state: S
+  def optReply: Option[Out]
+  def closeWebSocket: Boolean
+
+  def _1: S = state
+  def _2: (Option[Out], Boolean) = (optReply, closeWebSocket)
+}
+case class Result[S, Out](state: S, optReply: Option[Out], closeWebSocket: Boolean = false) extends HandlerResult[S, Out]
+case class StatelessResult[Out](optReply: Option[Out], closeWebSocket: Boolean = false) extends HandlerResult[Unit, Out] {
+  def state = ()
 }
 
 /**

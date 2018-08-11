@@ -46,7 +46,7 @@ object FactorHttp4sWebsocketMultiJvmServerNode extends fs2.StreamApp[IO] with or
         if (terminate)
           terminateAction.unsafeRunSync()
 
-        IO(s1, Some(s1))
+        IO(Result(s1, Some(s1)))
       }
       val decode: WebSocketFrame => Either[String, Int] = {
         case frame: Text => frame.str.parseInt.leftMap(_.toString)
